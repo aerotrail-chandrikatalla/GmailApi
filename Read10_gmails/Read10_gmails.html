@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Gmail API Quickstart - Latest 10 Emails</title>
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <h2>Gmail API Quickstart - Latest 10 Emails</h2>
+
+    <!-- Buttons -->
+    <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
+    <button id="signout_button" onclick="handleSignoutClick()">Sign Out</button>
+
+    <pre id="content" style="white-space: pre-wrap;"></pre>
+
+    <script type="text/javascript">
+      // ✨ Replace these with your credentials
+      const CLIENT_ID = "Your Client Id";
+      const API_KEY = "Your API Key";
+
+      // Gmail API discovery document
+      const DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest";
+
+      // Scope for read-only Gmail access
+      const SCOPES = "https://www.googleapis.com/auth/gmail.readonly";
+
+      let tokenClient;
+      let gapiInited = false;
+      let gisInited = false;
+
+      document.getElementById("authorize_button").style.visibility = "hidden";
+      document.getElementById("signout_button").style.visibility = "hidden";
+
+      // Google API (gapi) library loaded
+      function gapiLoaded() {
+        gapi.load("client", initializeGapiClient);
+      }
+
+      // Initialize Gmail API client
+      async function initializeGapiClient() {
+        await gapi.client.init({
+          apiKey: API_KEY,
+          discoveryDocs: [DISCOVERY_DOC],
+        });
+        gapiInited = true;
+        maybeEnableButtons();
+      }
+
+      // Google Identity Services (GIS) loaded
+      function gisLoaded() {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          callback: "",
+        });
+        gisInited = true;
+        maybeEnableButtons();
+      }
+
+      // Enable authorize button only when both gapi & gis are ready
+      function maybeEnableButtons() {
+        if (gapiInited && gisInited) {
+          document.getElementById("authorize_button").style.visibility = "visible";
+        }
+      }
+
+      // Handle user authentication
+      function handleAuthClick() {
+        tokenClient.callback = async (resp) => {
+          if (resp.error !== undefined) {
+            throw resp;
+          }
+          document.getElementById("signout_button").style.visibility = "visible";
+          document.getElementById("authorize_button").innerText = "Refresh";
+          await listMessages();
+        };
+
+        if (gapi.client.getToken() === null) {
+          tokenClient.requestAccessToken({ prompt: "consent" });
+        } else {
+          tokenClient.requestAccessToken({ prompt: "" });
+        }
+      }
+
+      // Sign out the user
+      function handleSignoutClick() {
+        const token = gapi.client.getToken();
+        if (token !== null) {
+          google.accounts.oauth2.revoke(token.access_token);
+          gapi.client.setToken("");
+          document.getElementById("content").innerText = "";
+          document.getElementById("authorize_button").innerText = "Authorize";
+          document.getElementById("signout_button").style.visibility = "hidden";
+        }
+      }
+
+      // 📩 Fetch and display latest 10 Gmail messages
+      async function listMessages() {
+        try {
+          let response = await gapi.client.gmail.users.messages.list({
+            userId: "me",
+            maxResults: 10,
+          });
+
+          const messages = response.result.messages;
+          if (!messages || messages.length === 0) {
+            document.getElementById("content").innerText = "No messages found.";
+            return;
+          }
+
+          let output = "Latest 10 Emails:\n\n";
+
+          for (let msg of messages) {
+            let message = await gapi.client.gmail.users.messages.get({
+              userId: "me",
+              id: msg.id,
+            });
+
+            let headers = message.result.payload.headers;
+            let from = headers.find((h) => h.name === "From")?.value || "Unknown";
+            let subject = headers.find((h) => h.name === "Subject")?.value || "No subject";
+            let snippet = message.result.snippet;
+
+            output += `From: ${from}\nSubject: ${subject}\nSnippet: ${snippet}\n\n`;
+          }
+
+          document.getElementById("content").innerText = output;
+        } catch (err) {
+          document.getElementById("content").innerText = "Error: " + err.message;
+        }
+      }
+    </script>
+
+    <!-- Load Google APIs -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+  </body>
+</html>
