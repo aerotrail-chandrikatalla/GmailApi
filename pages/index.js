@@ -1,199 +1,244 @@
 import { useState, useEffect } from 'react';
-import Head from 'next/head';
 
-// ✨ This is a separate component for sending emails via your backend
-const EmailSender = () => {
-  const [to, setTo] = useState('');
-  const [subject, setSubject] = useState('');
-  const [messageBody, setMessageBody] = useState('');
-  const [status, setStatus] = useState('');
+const EMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly"
+];
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus('Sending...');
+// Reusable hook to communicate with the service worker
+const useChromeIdentity = () => {
+    const [authToken, setAuthToken] = useState(null);
+    const [authStatus, setAuthStatus] = useState('Loading...');
 
-    try {
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, html: `<p>${messageBody}</p>` }),
-      });
+    useEffect(() => {
+        // Check for existing token silently on load
+        chrome.runtime.sendMessage({ action: "checkAuth" }, (response) => {
+            if (response && response.success) {
+                setAuthToken(response.token);
+                setAuthStatus('Authorized');
+            } else {
+                setAuthStatus('Sign In Required');
+            }
+        });
+    }, []);
 
-      const data = await response.json();
-      if (response.ok) {
-        setStatus('Email sent successfully!');
-      } else {
-        setStatus(`Failed to send email: ${data.message}`);
-      }
-    } catch (error) {
-      setStatus('Failed to send email. Check console.');
-    }
-  };
+    const signIn = () => {
+        setAuthStatus('Authorizing...');
+     
+        chrome.runtime.sendMessage({ action: "getAuthToken" }, (response) => {
+            if (response && response.success) {
+                setAuthToken(response.token);
+                setAuthStatus('Authorized');
+            } else {
+                setAuthStatus(`Authorization Failed: ${response.error}`);
+            }
+        });
+    };
 
-  return (
-    <div style={{ marginTop: '20px', borderTop: '1px solid #ccc', paddingTop: '20px' }}>
-      <h2>Send Email via Extension</h2>
-      <form onSubmit={handleSubmit}>
-        <input type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" required style={{ width: '100%', marginBottom: '10px' }} />
-        <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" required style={{ width: '100%', marginBottom: '10px' }} />
-        <textarea value={messageBody} onChange={(e) => setMessageBody(e.target.value)} placeholder="Message Body" required rows="5" style={{ width: '100%', marginBottom: '10px' }}></textarea>
-        <button type="submit">Send Email</button>
-      </form>
-      {status && <p>{status}</p>}
-    </div>
-  );
+    const signOut = () => {
+        if (authToken) {
+            setAuthStatus('Signing Out...');
+            chrome.runtime.sendMessage({ action: "signOut", token: authToken }, (response) => {
+                if (response && response.success) {
+                    setAuthToken(null);
+                    setAuthStatus('Signed Out');
+                } else {
+                    setAuthStatus(`Sign Out Failed: ${response.error}`);
+                }
+            });
+        }
+    };
+
+    return { authToken, authStatus, signIn, signOut, setAuthStatus };
 };
 
-// --------------------------------------------------------------------------
-// ✨ Main Page Component for viewing emails
-// --------------------------------------------------------------------------
+// Component for sending emails via the background script
+const EmailSender = ({ authToken, setAuthStatus }) => {
+    const [to, setTo] = useState('');
+    const [subject, setSubject] = useState('');
+    const [messageBody, setMessageBody] = useState('');
+    const [status, setStatus] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (!authToken) {
+            setStatus('Error: You must be signed in to send an email.');
+            return;
+        }
+        
+        setStatus('Sending...');
+
+        if (!to || !subject || !messageBody) {
+            setStatus('Error: All fields are required.');
+            return;
+        }
+
+        try {
+            // Send the email data and the token to the background script
+            chrome.runtime.sendMessage({ 
+                action: "sendEmail",
+                token: authToken,
+                emailData: { to, subject, messageBody }
+            }, (response) => {
+                if (response && response.success) {
+                    setStatus('Email sent successfully!');
+                    setTo('');
+                    setSubject('');
+                    setMessageBody('');
+                } else {
+                    setStatus(`Failed to send email: ${response.error || 'Unknown error.'}`);
+                }
+            });
+        } catch (error) {
+            console.error("Messaging error:", error);
+            setStatus('Failed to send email. Check browser console.');
+        }
+    };
+
+    return (
+        <div className="email-sender-container">
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '15px' }}>Send Email</h2>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <input 
+                    type="email" 
+                    value={to} 
+                    onChange={(e) => setTo(e.target.value)} 
+                    placeholder="To Email Address" 
+                    required 
+                    style={inputStyle}
+                />
+                {/* ... other form fields (subject, messageBody) remain the same ... */}
+                <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" required style={inputStyle} />
+                <textarea value={messageBody} onChange={(e) => setMessageBody(e.target.value)} placeholder="Message Body" required rows="5" style={{ ...inputStyle, resize: 'vertical' }}></textarea>
+                
+                <button type="submit" style={buttonStyle} disabled={!authToken}>
+                    {authToken ? 'Send Email' : 'Authorize to Send'}
+                </button>
+            </form>
+            {status && <p style={{ marginTop: '10px', color: status.includes('successfully') ? 'green' : 'red' }}>{status}</p>}
+        </div>
+    );
+};
 
 export default function HomePage() {
-  const [content, setContent] = useState('');
-  const [authButtonVisible, setAuthButtonVisible] = useState(false);
-  const [signOutButtonVisible, setSignOutButtonVisible] = useState(false);
+    const { authToken, authStatus, signIn, signOut, setAuthStatus } = useChromeIdentity();
+    const [content, setContent] = useState('');
 
-  // ✨ Replace with your own credentials
-  const CLIENT_ID = "75917002237-m87tjgt4ske5r2k06raba8u7vucm5ljg.apps.googleusercontent.com"; // Use your Web application Client ID
-  const API_KEY = "AIzaSyA9QFYzEiVLIV4uYCicuqfX-szJDWnHfwk"; // Use your API Key
+    const listMessages = () => {
+        if (!authToken) {
+            setContent("Authorization required to list messages.");
+            return;
+        }
 
-  const DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest";
-  const SCOPES = "https://mail.google.com/"; // Use the broader scope for sending and viewing
+        setContent("Loading messages...");
+        chrome.runtime.sendMessage({ 
+            action: "getEmails", 
+            token: authToken 
+        }, (response) => {
+            if (response && response.success) {
+                const emails = response.emails;
+                if (!emails || emails.length === 0) {
+                    setContent("No messages found in Inbox.");
+                    return;
+                }
 
-  let tokenClient;
-  let gapiInited = false;
-  let gisInited = false;
-
-  const gapiLoaded = () => {
-    window.gapi.load("client", initializeGapiClient);
-  };
-
-  const initializeGapiClient = async () => {
-    await window.gapi.client.init({
-      apiKey: API_KEY,
-      discoveryDocs: [DISCOVERY_DOC],
-    });
-    gapiInited = true;
-    maybeEnableButtons();
-  };
-
-  const gisLoaded = () => {
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: "",
-    });
-    gisInited = true;
-    maybeEnableButtons();
-  };
-
-  const maybeEnableButtons = () => {
-    if (gapiInited && gisInited) {
-      setAuthButtonVisible(true);
-    }
-  };
-
-  const handleAuthClick = () => {
-    tokenClient.callback = async (resp) => {
-      if (resp.error !== undefined) {
-        throw resp;
-      }
-      setSignOutButtonVisible(true);
-      setAuthButtonVisible(false);
-      await listMessages();
-    };
-
-    if (window.gapi.client.getToken() === null) {
-      tokenClient.requestAccessToken({ prompt: "consent" });
-    } else {
-      tokenClient.requestAccessToken({ prompt: "" });
-    }
-  };
-
-  const handleSignoutClick = () => {
-    const token = window.gapi.client.getToken();
-    if (token !== null) {
-      window.google.accounts.oauth2.revoke(token.access_token);
-      window.gapi.client.setToken("");
-      setContent("");
-      setAuthButtonVisible(true);
-      setSignOutButtonVisible(false);
-    }
-  };
-
-  const listMessages = async () => {
-    try {
-      let response = await window.gapi.client.gmail.users.messages.list({
-        userId: "me",
-        maxResults: 10,
-      });
-
-      const messages = response.result.messages;
-      if (!messages || messages.length === 0) {
-        setContent("No messages found.");
-        return;
-      }
-
-      let output = "Latest 10 Emails:\n\n";
-      for (let msg of messages) {
-        let message = await window.gapi.client.gmail.users.messages.get({
-          userId: "me",
-          id: msg.id,
+                let output = "Latest Emails:\n\n";
+                for (let email of emails) {
+                    output += `From: ${email.from}\nSubject: ${email.subject}\nSnippet: ${email.snippet}\n---\n`;
+                }
+                setContent(output);
+            } else {
+                setContent(`Error listing messages: ${response.error}`);
+            }
         });
-
-        let headers = message.result.payload.headers;
-        let from = headers.find((h) => h.name === "From")?.value || "Unknown";
-        let subject = headers.find((h) => h.name === "Subject")?.value || "No subject";
-        let snippet = message.result.snippet;
-
-        output += `From: ${from}\nSubject: ${subject}\nSnippet: ${snippet}\n\n`;
-      }
-      setContent(output);
-    } catch (err) {
-      setContent("Error: " + err.message);
-    }
-  };
-
-  useEffect(() => {
-    // These script tags are a common way to load the Google APIs in a React component
-    const gapiScript = document.createElement("script");
-    gapiScript.src = "https://apis.google.com/js/api.js";
-    gapiScript.async = true;
-    gapiScript.defer = true;
-    gapiScript.onload = gapiLoaded;
-    document.head.appendChild(gapiScript);
-
-    const gisScript = document.createElement("script");
-    gisScript.src = "https://accounts.google.com/gsi/client";
-    gisScript.async = true;
-    gisScript.defer = true;
-    gisScript.onload = gisLoaded;
-    document.head.appendChild(gisScript);
-
-    return () => {
-      document.head.removeChild(gapiScript);
-      document.head.removeChild(gisScript);
     };
-  }, []);
 
-  return (
-    <div>
-      <Head>
-        <title>Gmail API Quickstart</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
+    return (
+        <div style={pageStyle}>
+            {/* Removed Head and Next.js specific elements (Next.js is not typically used for a simple Chrome extension popup) */}
+            <div style={containerStyle}>
+                <h1 style={headerStyle}>Gmail API Extension</h1>
+                
+                <div style={buttonContainerStyle}>
+                    <p style={{marginBottom: '10px'}}>Status: <b>{authStatus}</b></p>
+                    {authToken ? (
+                        <>
+                            <button onClick={listMessages} style={{...buttonStyle, marginRight: '10px'}}>List Mail</button>
+                            <button onClick={signOut} style={buttonStyle}>Sign Out</button>
+                        </>
+                    ) : (
+                        <button onClick={signIn} style={buttonStyle}>Authorize Gmail Access</button>
+                    )}
+                </div>
 
-      <div style={{ padding: '20px' }}>
-        <h1>Gmail API Quickstart</h1>
-        <p>This app can both send and view emails.</p>
+                <pre id="content" style={contentStyle}>{content}</pre>
 
-        {authButtonVisible && <button onClick={handleAuthClick}>Authorize</button>}
-        {signOutButtonVisible && <button onClick={handleSignoutClick}>Sign Out</button>}
-
-        <pre id="content" style={{ whiteSpace: 'pre-wrap', marginTop: '20px' }}>{content}</pre>
-
-        <EmailSender />
-      </div>
-    </div>
-  );
+                <EmailSender authToken={authToken} setAuthStatus={setAuthStatus} />
+            </div>
+        </div>
+    );
 }
+
+
+const pageStyle = {
+    fontFamily: 'Inter, sans-serif',
+    backgroundColor: '#f8f9fa',
+    minHeight: '100vh',
+    padding: '20px',
+    display: 'flex',
+    justifyContent: 'center',
+};
+
+const containerStyle = {
+    maxWidth: '800px',
+    width: '100%',
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+};
+
+const headerStyle = {
+    fontSize: '2rem',
+    color: '#1a73e8',
+    marginBottom: '10px',
+    borderBottom: '2px solid #e0e0e0',
+    paddingBottom: '10px'
+};
+
+const buttonStyle = {
+    padding: '10px 20px',
+    fontSize: '16px',
+    borderRadius: '4px',
+    border: 'none',
+    cursor: 'pointer',
+    backgroundColor: '#4285f4',
+    color: 'white',
+    transition: 'background-color 0.3s',
+};
+
+const buttonContainerStyle = {
+    marginBottom: '20px',
+};
+
+const inputStyle = {
+    padding: '10px',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
+    fontSize: '16px',
+    width: '100%',
+    boxSizing: 'border-box',
+};
+
+const contentStyle = {
+    whiteSpace: 'pre-wrap', 
+    marginTop: '20px', 
+    padding: '15px', 
+    backgroundColor: '#e9ecef', 
+    border: '1px solid #ced4da', 
+    borderRadius: '4px',
+    maxHeight: '400px',
+    overflowY: 'auto',
+    color: '#343a40',
+};

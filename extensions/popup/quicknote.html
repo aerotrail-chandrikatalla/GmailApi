@@ -1,140 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Gmail Extension</title>
-  <style>
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-      padding: 10px; 
-      min-width: 400px; 
-      max-width: 500px;
-    }
-    .hidden { display: none; }
-    h2 { 
-      margin-bottom: 10px; 
-      border-bottom: 1px solid #eee; 
-      padding-bottom: 5px; 
-      color: #1a73e8;
-    }
-    button { 
-      width: 100%; 
-      padding: 12px; 
-      border: none; 
-      border-radius: 6px; 
-      cursor: pointer; 
-      background-color: #1a73e8; 
-      color: white; 
-      margin-top: 8px; 
-      font-weight: bold;
-      font-size: 14px;
-      transition: background-color 0.2s;
-    }
-    button:hover {
-      background-color: #1669d6;
-    }
-    button:disabled {
-      background-color: #cccccc;
-      cursor: not-allowed;
-    }
-    input[type="email"], input[type="text"], textarea { 
-      width: 100%; 
-      padding: 10px; 
-      margin-bottom: 12px; 
-      box-sizing: border-box; 
-      border: 1px solid #ddd; 
-      border-radius: 4px; 
-      font-size: 14px;
-    }
-    textarea {
-      resize: vertical;
-      min-height: 100px;
-    }
-    #auth-section, #main-app-section { 
-      text-align: center; 
-    }
-    #status-message { 
-      font-weight: bold; 
-      margin-top: 12px; 
-      padding: 8px;
-      border-radius: 4px;
-      text-align: center;
-    }
-    #email-list { 
-      text-align: left; 
-      margin-top: 20px; 
-      border-top: 1px solid #eee; 
-      padding-top: 15px; 
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    .email-item { 
-      border: 1px solid #e0e0e0; 
-      border-radius: 6px; 
-      padding: 12px; 
-      margin-bottom: 10px; 
-      background-color: #f8f9fa;
-    }
-    .email-item h4 { 
-      margin: 0 0 8px 0; 
-      font-size: 14px; 
-      color: #202124; 
-    }
-    .email-item p { 
-      margin: 4px 0; 
-      font-size: 13px; 
-      color: #5f6368; 
-    }
-    .email-item small {
-      color: #999;
-      font-size: 11px;
-    }
-    .button-group {
-      display: flex;
-      gap: 8px;
-    }
-    .button-group button {
-      flex: 1;
-    }
-    .sign-out {
-      background-color: #dc3545 !important;
-    }
-    .sign-out:hover {
-      background-color: #c82333 !important;
-    }
-  </style>
+    <meta charset="utf-8">
+    <title>Gmail Extension</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            padding: 10px; 
+            min-width: 400px; 
+            max-width: 500px;
+        }
+        .hidden { display: none; }
+        h2 { 
+            margin-bottom: 10px; 
+            border-bottom: 1px solid #eee; 
+            padding-bottom: 5px; 
+            color: #1a73e8;
+        }
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            background-color: #1a73e8; 
+            color: white; 
+            margin-top: 8px; 
+            font-weight: bold;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #1669d6;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        input[type="email"], input[type="text"], textarea { 
+            width: 100%; 
+            padding: 10px; 
+            margin-bottom: 12px; 
+            box-sizing: border-box; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            font-size: 14px;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        #auth-section, #main-app-section { 
+            text-align: center; 
+        }
+        #status-message { 
+            font-weight: bold; 
+            margin-top: 12px; 
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        #email-list { 
+            text-align: left; 
+            margin-top: 20px; 
+            border-top: 1px solid #eee; 
+            padding-top: 15px; 
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .email-item { 
+            border: 1px solid #e0e0e0; 
+            border-radius: 6px; 
+            padding: 12px; 
+            margin-bottom: 10px; 
+            background-color: #f8f9fa;
+        }
+        .email-item h4 { 
+            margin: 0 0 8px 0; 
+            font-size: 14px; 
+            color: #202124; 
+        }
+        .email-item p { 
+            margin: 4px 0; 
+            font-size: 13px; 
+            color: #5f6368; 
+        }
+        .email-item small {
+            color: #999;
+            font-size: 11px;
+        }
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px; /* Added spacing */
+            margin-bottom: 15px; /* Added spacing */
+        }
+        .button-group button {
+            flex: 1;
+            margin-top: 0; /* Override default button margin */
+        }
+        .sign-out {
+            background-color: #dc3545 !important;
+        }
+        .sign-out:hover {
+            background-color: #c82333 !important;
+        }
+    </style>
 </head>
 <body>
-  
-  <!-- Authorization Section -->
-  <div id="auth-section">
-    <h2>Gmail Authorization</h2>
-    <p>Please authorize this extension to send and view emails.</p>
-    <button id="authorize_button">Authorize with Google</button>
-    <div id="status-message">Ready to authorize</div>
-  </div>
-  
-  <!-- Main App Section -->
-  <div id="main-app-section" class="hidden">
-    <h2>Gmail Extension</h2>
     
-    <h3>Send Email</h3>
-    <form id="emailForm">
-      <input type="email" id="emailTo" placeholder="Recipient's Email" required>
-      <input type="text" id="subject" placeholder="Subject" required>
-      <textarea id="messageBody" placeholder="Type your message here..." required></textarea>
-      <button type="submit">Send Email</button>
-    </form>
-    
-    <div class="button-group">
-      <button id="viewEmailsButton">View Latest Emails</button>
-      <button id="signOutButton" class="sign-out">Sign Out</button>
+    <div id="auth-section">
+        <h2>Gmail Authorization</h2>
+        <p>Please authorize this extension to send and view emails.</p>
+        <button id="authorize_button">Authorize with Google</button>
     </div>
     
-    <div id="status-message">Ready</div>
-    <div id="email-list"></div>
-  </div>
+    <div id="main-app-section" class="hidden">
+        <h2>Gmail Extension</h2>
+        
+        <h3>Send Email</h3>
+        <form id="emailForm">
+            <input type="email" id="emailTo" placeholder="Recipient's Email" required>
+            <input type="text" id="subject" placeholder="Subject" required>
+            <textarea id="messageBody" placeholder="Type your message here..." required></textarea>
+            <button type="submit">Send Email</button>
+        </form>
+        
+        <div class="button-group">
+            <button id="viewEmailsButton">View Latest Emails</button>
+            <button id="signOutButton" class="sign-out">Sign Out</button>
+        </div>
+        
+        <div id="email-list"></div>
+    </div>
 
-  <script src="popup.js"></script>
+    <div id="status-message">Initializing...</div>
+
+    <script src="popup.js"></script>
 </body>
 </html>

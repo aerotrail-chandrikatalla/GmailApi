@@ -1,18 +1,16 @@
 // background.js
 
-// Keep service worker alive
+// Keep service worker alive (Necessary for older versions of Manifest V3, good practice)
 let keepAlive = () => {
   console.log("Background service worker keeping alive");
 };
-
-// Set up periodic keep-alive
 setInterval(keepAlive, 20000);
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Gmail Extension installed and background worker active");
 });
 
-// Get OAuth2 token using Chrome Identity API
+// Get OAuth2 token non-interactively (for checkAuth)
 function getAuthToken() {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive: false }, (token) => {
@@ -27,7 +25,7 @@ function getAuthToken() {
   });
 }
 
-// Get OAuth2 token with interactive auth (popup)
+// Get OAuth2 token interactively (for getAuthToken)
 function getAuthTokenInteractive() {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive: true }, (token) => {
@@ -96,8 +94,7 @@ async function sendEmail(emailData, token) {
 
 // Get emails using Gmail API
 async function getEmails(token) {
-  // First, get the list of messages
-  const listResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10', {
+  const listResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&labelIds=INBOX', {
     headers: {
       'Authorization': `Bearer ${token}`,
     }
@@ -110,16 +107,14 @@ async function getEmails(token) {
   
   const data = await listResponse.json();
   
-  // If no messages, return empty array
   if (!data.messages || data.messages.length === 0) {
     return [];
   }
   
-  // Get details for each message
   const emails = [];
   for (const message of data.messages) {
     try {
-      const messageResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}`, {
+      const messageResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         }
@@ -138,7 +133,6 @@ async function getEmails(token) {
       }
     } catch (error) {
       console.error('Error fetching message details:', error);
-      // Continue with other messages even if one fails
     }
   }
   
@@ -150,30 +144,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Background received message:', request.action);
   
   if (request.action === "checkAuth") {
-    // Just check if we have a token without prompting
     getAuthToken()
-      .then(token => {
-        console.log('Token found');
-        sendResponse({ success: true, token });
-      })
-      .catch(error => {
-        console.log('No token found:', error.message);
-        sendResponse({ success: false, error: error.message });
-      });
+      .then(token => sendResponse({ success: true, token }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
   
   if (request.action === "getAuthToken") {
-    // Get token with interactive auth
     getAuthTokenInteractive()
-      .then(token => {
-        console.log('Token received successfully');
-        sendResponse({ success: true, token });
-      })
-      .catch(error => {
-        console.error('Token error:', error);
-        sendResponse({ success: false, error: error.message });
-      });
+      .then(token => sendResponse({ success: true, token }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
   
@@ -184,14 +164,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     sendEmail(request.emailData, request.token)
-      .then(result => {
-        console.log('Email sent successfully');
-        sendResponse({ success: true, result });
-      })
-      .catch(error => {
-        console.error('Send email error:', error);
-        sendResponse({ success: false, error: error.message });
-      });
+      .then(result => sendResponse({ success: true, result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
   
@@ -202,28 +176,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     getEmails(request.token)
-      .then(emails => {
-        console.log('Emails fetched successfully:', emails.length);
-        sendResponse({ success: true, emails });
-      })
-      .catch(error => {
-        console.error('Get emails error:', error);
-        sendResponse({ success: false, error: error.message });
-      });
+      .then(emails => sendResponse({ success: true, emails }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
   
   if (request.action === "signOut") {
     removeCachedAuthToken(request.token)
-      .then(() => {
-        sendResponse({ success: true });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
+      .then(() => sendResponse({ success: true }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
 });
-
 
 console.log("Gmail Extension background worker started");
